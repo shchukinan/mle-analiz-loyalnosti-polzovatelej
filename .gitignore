@@ -213,4 +213,5 @@ __marimo__/
 
 # Отчет и визуализации
 reports/*
+!reports/
 !reports/final_report.txt
