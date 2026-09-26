@@ -45,14 +45,14 @@ def main(save_figures: bool = True):
         )
 
         # 6. Гипотеза 1: спорт vs концерты
-        viz.plot_segment_violin(
+        viz.plot_segment_comparison(
             processor.user_profile,
             seg_a='спорт',
             seg_b='концерты',
         )
 
         # 7. Гипотеза 2: размер региона vs retention
-        viz.plot_region_scatter(processor.user_profile)
+        viz.plot_region_scatter_bubble(processor.user_profile)
 
         # 8. Распределение выручки (гистограмма + лог + boxplot)
         viz.plot_revenue_distribution(processor.df)

@@ -204,101 +204,166 @@ class DataVisualizer:
 
     # 5. Корреляционный анализ: тепловая карта phi_k + топ-признаки
     def plot_correlation_summary(self, phik_matrix: pd.DataFrame,
-                                 target: str = 'total_orders',
-                                 top_n: int = 10,
-                                 save_heatmap: bool = True,
-                                 save_top_bar: bool = True) -> None:
-        """
-        Генерирует сразу два графика по корреляционной матрице:
-          1) тепловую карту всей матрицы phi_k,
-          2) ранжирование признаков по силе связи с целевой переменной.
+                             target: str = 'total_orders',
+                             save_heatmap: bool = True,
+                             save_top_bar: bool = True) -> None:
+    """
+    Генерирует два графика по корреляционной матрице:
+      1) тепловую карту всей матрицы phi_k,
+      2) вертикальную тепловую карту со ВСЕМИ признаками,
+         отсортированными по силе связи с целевой переменной.
 
-        Параметры save_heatmap / save_top_bar позволяют отключить
-        любой из двух графиков, если нужен только один.
-        """
-        if save_heatmap:
-            fig, ax = plt.subplots(figsize=(14, 10))
-            sns.heatmap(
-                phik_matrix,
-                annot=True, fmt='.2f',
-                cmap='coolwarm', vmin=0, vmax=1,
-                linewidths=0.5, ax=ax,
-            )
-            ax.set_title('Тепловая карта корреляционной матрицы $\\phi_k$',
-                         fontsize=14)
-            self._save('05_phik_heatmap.png')
+    Параметры save_heatmap / save_top_bar позволяют отключить
+    любой из двух графиков, если нужен только один.
+    """
+    if phik_matrix is None or phik_matrix.empty:
+        print('Матрица phi_k пустая — пропускаю построение корреляционных графиков.')
+        return
+    # Полная матрица phi_k
+    if save_heatmap:
+        fig, ax = plt.subplots(figsize=(14, 10))
+        sns.heatmap(
+            phik_matrix,
+            annot=True, fmt='.2f',
+            cmap='coolwarm', vmin=0, vmax=1,
+            linewidths=0.5, ax=ax,
+        )
+        ax.set_title('Тепловая карта корреляционной матрицы $\\phi_k$',
+                     fontsize=14)
+        self._save('05_phik_heatmap.png')
+    # Вертикальная тепловая карта со всеми признаками
+    if save_top_bar:
+        # Отбрасываем саму целевую переменную и сортируем по убыванию
+        ranking = (
+            phik_matrix
+            .loc[phik_matrix.index != target, [target]]
+            .sort_values(target, ascending=False)
+        )
 
-        if save_top_bar:
-            top = (
-                phik_matrix
-                .loc[phik_matrix.index != target, [target]]
-                .sort_values(target, ascending=True)
-                .tail(top_n)
-            )
-            fig, ax = plt.subplots(figsize=(10, 6))
-            ax.barh(top.index, top[target], color='steelblue')
-            for i, v in enumerate(top[target]):
-                ax.text(v + 0.005, i, f'{v:.2f}', va='center', fontsize=10)
-            ax.set_title(f'Топ-{top_n} признаков по связи с «{target}»',
-                         fontsize=13)
-            ax.set_xlabel('Коэффициент $\\phi_k$')
-            ax.set_xlim(0, top[target].max() * 1.15)
-            ax.grid(True, alpha=0.3, axis='x')
-            self._save('06_top_phik_features.png')
+        # Высота фигуры пропорциональна числу признаков
+        fig_height = max(4, 0.45 * len(ranking))
+        fig, ax = plt.subplots(figsize=(4, fig_height))
+
+        sns.heatmap(
+            ranking,
+            annot=True, fmt='.2f',
+            cmap='coolwarm', vmin=0, vmax=1,
+            linewidths=0.5,
+            cbar=True,
+            ax=ax,
+        )
+        ax.set_title(f'Тепловая карта коэффициента $\\phi_k$\n'
+                     f'для переменной {target}',
+                     fontsize=12)
+        ax.set_xlabel('Число заказов')
+        ax.set_ylabel('')
+
+        self._save('06_top_phik_features.png')
+
 
     # 6. Гипотеза 1: спорт vs концерты (violin)
-    def plot_segment_violin(self, profile: pd.DataFrame,
+    def plot_segment_comparison(self, profile: pd.DataFrame,
                             col: str = 'first_event_type',
                             seg_a: str = 'спорт',
                             seg_b: str = 'концерты') -> None:
-        """Violin-plot для сравнения retention двух сегментов."""
-        df_plot = profile[profile[col].isin([seg_a, seg_b])]
+    """
+    Сравнение retention двух сегментов: доля возвратов с 95%-ми
+    доверительными интервалами (Wilson).
+    """
+    from statsmodels.stats.proportion import proportion_confint
 
-        fig, ax = plt.subplots(figsize=(8, 6))
-        sns.violinplot(data=df_plot, x=col, y='is_two',
-                       order=[seg_a, seg_b], ax=ax)
-        ax.set_title(f'Сравнение Retention:\n«{seg_a}» vs «{seg_b}»',
-                     fontsize=13)
-        ax.set_xlabel('Тип мероприятия первого заказа')
-        ax.set_ylabel('Доля возвратов (is_two)')
-        self._save('07_segment_violin.png')
+    df_plot = profile[profile[col].isin([seg_a, seg_b])]
+
+    stats = []
+    for seg in [seg_a, seg_b]:
+        subset = df_plot[df_plot[col] == seg]
+        n = len(subset)
+        successes = subset['is_two'].sum()
+        rate = successes / n
+        # 95% ДИ методом Wilson — работает надёжнее на малых n
+        ci_low, ci_high = proportion_confint(successes, n,
+                                             alpha=0.05, method='wilson')
+        stats.append({
+            'segment': seg,
+            'n': n,
+            'rate': rate,
+            'err_low': rate - ci_low,
+            'err_high': ci_high - rate,
+        })
+
+    fig, ax = plt.subplots(figsize=(8, 6))
+    x = np.arange(2)
+    rates = [s['rate'] for s in stats]
+    errors = [[s['err_low'] for s in stats],
+              [s['err_high'] for s in stats]]
+
+    bars = ax.bar(x, rates, yerr=errors, capsize=8,
+                  color=['#e74c3c', '#2ecc71'], alpha=0.75,
+                  edgecolor='black')
+
+    # Подписи над столбиками
+    for i, s in enumerate(stats):
+        ax.text(i, s['rate'] + s['err_high'] + 0.01,
+                f"{s['rate']:.1%}\n(n={s['n']:,})",
+                ha='center', fontsize=11)
+
+    ax.set_xticks(x)
+    ax.set_xticklabels([s['segment'] for s in stats])
+    ax.set_ylabel('Доля возвратов')
+    ax.set_ylim(0, max(rates) + 0.15)
+    ax.set_title(f'Сравнение Retention: «{seg_a}» vs «{seg_b}»\n'
+                 f'с 95% доверительными интервалами', fontsize=12)
+    ax.grid(True, alpha=0.3, axis='y')
+
+    self._save('07_segment_comparison.png') 
 
     # 7. Гипотеза 2: размер региона vs retention (scatter)
 
-    def plot_region_scatter(self, profile: pd.DataFrame,
-                            col: str = 'first_region',
-                            min_users: int = 100) -> None:
-        """Скаттер: число пользователей в регионе vs доля возвратов."""
-        stats = (
-            profile
-            .groupby(col, observed=True)
-            .agg(users=('user_id', 'count'),
-                 return_rate=('is_two', 'mean'))
-            .query('users >= @min_users')
-        )
-        overall = profile['is_two'].mean()
+    def plot_region_scatter_bubble(self, profile: pd.DataFrame,
+                               col: str = 'first_region',
+                               min_users: int = 100) -> None:
+    """Скаттер: размер точки = число пользователей в регионе."""
+    stats = (
+        profile
+        .groupby(col, observed=True)
+        .agg(users=('user_id', 'count'),
+             return_rate=('is_two', 'mean'))
+        .query('users >= @min_users')
+        .reset_index()
+    )
+    overall = profile['is_two'].mean()
 
-        fig, ax = plt.subplots(figsize=(10, 6))
-        ax.scatter(stats['users'], stats['return_rate'],
-                   s=60, alpha=0.6, color='teal', edgecolor='black')
+    fig, ax = plt.subplots(figsize=(11, 7))
 
-        # Линейный тренд
-        z = np.polyfit(stats['users'], stats['return_rate'], 1)
-        x_range = np.linspace(stats['users'].min(),
-                              stats['users'].max(), 100)
-        ax.plot(x_range, np.polyval(z, x_range),
-                color='gray', linestyle=':', label='Линейный тренд')
+    sizes = stats['users'] / stats['users'].max() * 800 + 30  # 30..830
+    scatter = ax.scatter(
+        stats['users'], stats['return_rate'],
+        s=sizes, alpha=0.5, c=stats['return_rate'],
+        cmap='coolwarm', edgecolor='black', linewidth=0.5,
+    )
 
-        ax.axhline(overall, color='red', linestyle='--',
-                   label=f'Среднее: {overall:.1%}')
-        ax.set_xscale('log')
-        ax.set_title(f'Размер региона vs доля возвратов\n'
-                     f'(регионы ≥ {min_users} пользователей)', fontsize=13)
-        ax.set_xlabel('Число пользователей в регионе (лог-шкала)')
-        ax.set_ylabel('Доля возвратов')
-        ax.legend()
-        ax.grid(True, alpha=0.3)
-        self._save('08_region_scatter.png')
+    ax.axhline(overall, color='red', linestyle='--',
+               label=f'Среднее: {overall:.1%}')
+
+    # Подписи только для самых крупных регионов
+    top = stats.nlargest(5, 'users')
+    for _, row in top.iterrows():
+        ax.annotate(row[col], (row['users'], row['return_rate']),
+                    xytext=(5, 5), textcoords='offset points',
+                    fontsize=9)
+
+    ax.set_xscale('log')
+    ax.set_xlabel('Число пользователей в регионе (лог-шкала)')
+    ax.set_ylabel('Доля возвратов')
+    ax.set_title('Размер региона vs retention\n'
+                 '(размер точки = число пользователей)', fontsize=13)
+    ax.legend()
+    ax.grid(True, alpha=0.3)
+
+    cbar = plt.colorbar(scatter, ax=ax)
+    cbar.set_label('Доля возвратов')
+
+    self._save('08_region_scatter_bubble.png')
 
     # 8. Распределение выручки (гистограмма + лог + boxplot)
     
