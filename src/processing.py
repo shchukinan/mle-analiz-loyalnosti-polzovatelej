@@ -38,6 +38,7 @@ class DataProcessor:
         self.df = None                 # сырые данные + предобработанные
         self.user_profile = None       # профили пользователей
         self.segment_stats = {}        # доли возвратов по сегментам
+        self.phik_overview = None      # матрица корреляций
 
         self.reporter = DataFrameReporter(
             float_format='0.04f',
@@ -193,7 +194,7 @@ class DataProcessor:
         return self.df
 
 
-    # Шаг 3. Профили пользователей
+    # Профили пользователей
     def create_user_profiles(self) -> pd.DataFrame:
         """
         Строит агрегированный профиль по каждому пользователю.
