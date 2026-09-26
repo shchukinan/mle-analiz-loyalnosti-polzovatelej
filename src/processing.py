@@ -28,7 +28,7 @@ class DataProcessor:
 
         self.db_config = {
             'user': os.getenv('DB_USER'),
-            'pwd': os.getenv('DB_PASSWORD'),
+            'pwd': os.getenv('DB_PWD'),
             'host': os.getenv('DB_HOST'),
             'port': os.getenv('DB_PORT'),
             'db': os.getenv('DB_NAME'),
