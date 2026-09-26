@@ -40,24 +40,13 @@ def main(save_figures: bool = True):
         # 5. Корреляция: тепловая карта phi_k + топ-признаки
         viz.plot_correlation_summary(
             processor.phik_overview,
-            target='total_orders',
-            top_n=10,
+            target='total_orders'
         )
 
-        # 6. Гипотеза 1: спорт vs концерты
-        viz.plot_segment_comparison(
-            processor.user_profile,
-            seg_a='спорт',
-            seg_b='концерты',
-        )
-
-        # 7. Гипотеза 2: размер региона vs retention
-        viz.plot_region_scatter_bubble(processor.user_profile)
-
-        # 8. Распределение выручки (гистограмма + лог + boxplot)
+        # 7. Распределение выручки (гистограмма + лог + boxplot)
         viz.plot_revenue_distribution(processor.df)
         
-        #9. Распределение числа билетов в заказе
+        #8. Распределение числа билетов в заказе
         viz.plot_tickets_distribution(processor.df)
 
         print('\nВсе визуализации сохранены в reports/figures/')
